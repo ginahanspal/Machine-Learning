@@ -1,0 +1,377 @@
+from sklearn.cross_validation import KFold
+from sklearn.linear_model import LinearRegression, Lasso, Ridge, ElasticNet, SGDRegressor
+import numpy as np
+import pylab as pl
+import pandas as pd
+import warnings
+warnings.filterwarnings('ignore')
+commun = pd.read_csv("communities.csv", sep=',',na_values=["?"])
+
+# a) displaying basic statistics for each variable
+commun.describe(include="all")
+
+# separating the target attribute
+community = commun[commun.columns.drop('ViolentCrimesPerPop')]
+#excluding the identifier attributes as per HW instructions
+community = community[community.columns.drop('state')]
+community = community[community.columns.drop('communityname')]
+Target = commun['ViolentCrimesPerPop']
+
+# In the case of numeric attribute - OtherPerCap, imputing and filling-in the missing/non-numeric values using its mean
+OtherPerCap_mean = community.OtherPerCap.mean()
+community.OtherPerCap.fillna(OtherPerCap_mean, axis=0, inplace=True)
+community.isna().sum()
+dataset = community.values
+target = Target.values
+
+# Create linear regression object
+linreg = LinearRegression()
+
+# Train the model using the training sets
+linreg.fit(dataset,target)
+
+LinearRegression(copy_X=True, fit_intercept=True, n_jobs=1, normalize=False)
+
+# predictions for the first 10 instances
+print (linreg.predict(dataset[:10]))
+ 
+# b) RMSE value on the full training data
+p = linreg.predict(dataset)
+
+# Now we can constuct a vector of errors
+err = abs(p-target)
+# Dot product of error vector with itself gives us the sum of squared errors
+total_error = np.dot(err,err)
+
+# Compute RMSE
+rmse_train = np.sqrt(total_error/len(p))
+print (rmse_train)
+
+#  obtained regression coefficients (weights)
+print ('Regression Coefficients: \n', linreg.coef_)
+
+In [83]:
+feature_names = list(community)
+%matplotlib inline
+def plot_coefficients(model, n_features, featurenames):
+    pl.barh(range(n_features), model.coef_, align='center')
+    pl.yticks(np.arange(n_features), featurenames)
+    pl.xlabel("Coefficient Value")
+    pl.ylabel("Feature")
+    pl.ylim(-1, n_features)
+
+plot_coefficients(linreg, len(feature_names), feature_names)
+
+# correlation between the predicted and actual values of
+the target attribute.
+%matplotlib inline
+pl.plot(p, target,'ro')
+pl.plot([0,1],[0,1], 'g-')
+pl.xlabel('predicted')
+pl.ylabel('real')
+pl.show()
+
+# Now let's compute RMSE using 10-fold x-validation
+n = 10
+kf = KFold(len(dataset), n_folds=n)
+xval_err = 0
+for train,test in kf:
+    linreg.fit(dataset[train],target[train])
+    p = linreg.predict(dataset[test])
+    e = p-target[test]
+    xval_err += np.sqrt(np.dot(e,e)/len(dataset[test]))
+       
+rmse_10cv = xval_err/n
+print("Cross-Validation RMSE: ", rmse_10cv)
+print("Training RMSE: ", rmse_train)
+
+# Cross Validation RMSE is higher compared to the Training RMSE.
+
+
+from sklearn import feature_selection
+fs = feature_selection.SelectPercentile(feature_selection.f_regression, percentile=30)
+X_train_fs = fs.fit_transform(dataset, target)
+np.set_printoptions(suppress=True, precision=2, linewidth=80)
+
+for i in range(len(community.columns.values)):
+    if fs.get_support()[i]:
+        print (community.columns.values[i],'\t', fs.scores_[i]) 
+        
+# k-fold crossvalidation on the training data 
+from sklearn import cross_validation
+percentiles = range(1, 100, 5)
+results = []
+for i in range(1, 100, 5):
+    fs = feature_selection.SelectPercentile(feature_selection.f_regression, percentile=i)
+    X_train_fs = fs.fit_transform(dataset, target)
+    scores = cross_validation.cross_val_score(linreg, dataset, target, cv=5,scoring = 'mean_absolute_error')
+    print (i,scores.mean())
+    results = np.append(results, scores.mean())
+    
+    
+# Plot percentile of features VS. cross-validation scores
+import pylab as pl
+pl.figure()
+pl.xlabel("Percentage of features selected")
+pl.ylabel("Cross validation accuracy")
+pl.plot(percentiles,results)
+
+
+# d) Running Ridge and Lasso regression
+
+from sklearn.cross_validation import train_test_split
+from sklearn.linear_model import Lasso, Ridge, SGDRegressor
+#splitting
+X_train, X_test, y_train, y_test = train_test_split(dataset, target, test_size=0.2, random_state=33)
+
+#running Ridge and Lasso regression
+a = 0.5
+for name,met in [
+        ('lasso', Lasso(fit_intercept=True, alpha=a)),
+        ('ridge', Ridge(fit_intercept=True, alpha=a)),
+        ]:
+    met.fit(X_train,y_train)
+    p = met.predict(X_train)
+    e = p-y_train
+    total_error = np.dot(e,e)
+    rmse_train = np.sqrt(total_error/len(p))
+
+    kf = KFold(len(X_train), n_folds=5)
+    err = 0
+    for train,test in kf:
+        met.fit(X_train[train],y_train[train])
+        p = met.predict(X_train[test])
+        e = p-y_train[test]
+        err += np.dot(e,e)
+    rmse_10cv = np.sqrt(err/len(X_train))
+    
+    print('Method: %s' %name)
+    print('RMSE on training: %.4f' %rmse_train)
+    print('RMSE on 5-fold CV: %.4f' %rmse_10cv)
+    print ("\n")
+    
+#error values for ridge
+print('Ridge Regression')
+print('alpha\t RMSE_train\t RMSE_10cv\n')
+alpha = np.linspace(.01,20,50)
+t_rmse = np.array([])
+cv_rmse = np.array([])
+
+for a in alpha:
+    ridge = Ridge(alpha=a)
+    
+    # computing the RMSE on training data
+    ridge.fit(X_train,y_train)
+    p = ridge.predict(X_train)
+    err = p-y_train
+    total_error = np.dot(err,err)
+    rmse_train = np.sqrt(total_error/len(p))
+
+    # computing RMSE using 10-fold cross validation
+    kf = KFold(len(X_train), n_folds=10)
+    xval_err = 0
+    for train, test in kf:
+        ridge.fit(X_train[train], y_train[train])
+        p = ridge.predict(X_train[test])
+        err = p - y_train[test]
+        xval_err += np.sqrt(np.dot(err,err)/len(X_train[test]))
+    rmse_10cv = xval_err/n
+    
+    t_rmse = np.append(t_rmse, [rmse_train])
+    cv_rmse = np.append(cv_rmse, [rmse_10cv])
+    print('{:.3f}\t {:.4f}\t\t {:.4f}'.format(a,rmse_train,rmse_10cv))
+    
+    
+#Ridge
+pl.plot(alpha, t_rmse, label='RMSE-Train')
+pl.plot(alpha, cv_rmse, label='RMSE_XVal')
+pl.legend( ('RMSE-Train', 'RMSE_XVal') )
+pl.ylabel('RMSE')
+pl.xlabel('Alpha')
+pl.show()
+
+#error values for lasso
+print('Lasso Regression')
+print('alpha\t RMSE_train\t RMSE_10cv\n')
+alpha = np.linspace(.01,20,50)
+t_rmse = np.array([])
+cv_rmse = np.array([])
+
+for a in alpha:
+    lasso = Lasso(alpha=a)
+    
+    # computing the RMSE on training data
+    lasso.fit(X_train,y_train)
+    p = lasso.predict(X_train)
+    err = p-y_train
+    total_error = np.dot(err,err)
+    rmse_train = np.sqrt(total_error/len(p))
+
+    # computing RMSE using 10-fold cross validation
+    kf = KFold(len(X_train), n_folds=5)
+    xval_err = 0
+    for train, test in kf:
+        lasso.fit(X_train[train], y_train[train])
+        p = lasso.predict(X_train[test])
+        err = p - y_train[test]
+        xval_err += np.sqrt(np.dot(err,err)/len(X_train[test]))
+    rmse_10cv = xval_err/n
+    
+    t_rmse = np.append(t_rmse, [rmse_train])
+    cv_rmse = np.append(cv_rmse, [rmse_10cv])
+    print('{:.3f}\t {:.4f}\t\t {:.4f}'.format(a,rmse_train,rmse_10cv))
+    
+    
+    
+#Lasso
+pl.plot(alpha, t_rmse, label='RMSE-Train')
+pl.plot(alpha, cv_rmse, label='RMSE_XVal')
+pl.legend( ('RMSE-Train', 'RMSE_XVal') )
+pl.ylabel('RMSE')
+pl.xlabel('Alpha')
+pl.show()
+
+
+# Best alpha noted: 0.010
+# Running Ridge and Lasso regression with alpha = 0.010
+print("WITH NEW ALPHA = 0.010 on TEST SET")
+from sklearn.cross_validation import train_test_split
+from sklearn.linear_model import Lasso, Ridge, SGDRegressor
+print ("\n")
+#running Ridge and Lasso regression
+a = 0.010
+for name,met in [
+        ('lasso', Lasso(fit_intercept=True, alpha=a)),
+        ('ridge', Ridge(fit_intercept=True, alpha=a)),
+        ]:
+    met.fit(X_test,y_test)
+    p = met.predict(X_test)
+    e = p-y_test
+    total_error = np.dot(e,e)
+    rmse_test = np.sqrt(total_error/len(p))
+
+    kf = KFold(len(X_test), n_folds=10)
+    err = 0
+    for train,test in kf:
+        met.fit(X_test[train],y_test[train])
+        p = met.predict(X_test[test])
+        e = p-y_test[test]
+        err += np.dot(e,e)
+    rmse_10cv = np.sqrt(err/len(X_test))
+    
+    print('Method: %s' %name)
+    print('RMSE on testing: %.4f' %rmse_test)
+    print('RMSE on 5-fold CV: %.4f' %rmse_10cv)
+    print ("\n")
+    
+    
+# With New ALPHA = 0.010:
+# RMSE significantly reduced for Lasso from 0.2312 in training to 0.1632 in testing.
+# RMSE slightly reduced for Ridge from 0.1269 in training to 0.1194 in testing.
+
+# On 5-fold CV, RMSE significantly reduced for Lasso from 0.2313 in training to 0.1194 in testing.
+# On 5-fold CV, RMSE slightly increased for Ridge from 0.1335 in training to 0.1661 in testing.
+
+# Overall, an alpha value of 0.01 is considered better!
+
+
+# e) SGDRegessor
+
+from sklearn.preprocessing import StandardScaler
+
+# Scaling prior
+scaler = StandardScaler()
+scaler.fit(X_train)
+x_s = scaler.transform(X_train)
+
+
+# Grid-search to get the best parameters
+
+from sklearn.grid_search import GridSearchCV
+sgdreg = SGDRegressor()
+
+parameters = {
+    'penalty': ['l1','l2'],
+    'alpha': np.linspace(0.0001, 10, 20),
+    'n_iter': [300],
+}
+
+gs = GridSearchCV(sgdreg, parameters)
+%time _ = gs.fit(x_s, y_train)
+
+gs.best_params_, gs.best_score_
+
+
+# Using alpha = 0.0001, penalty = l1 on Train data
+
+sgdreg = SGDRegressor(penalty='l1', alpha=0.0001, n_iter=300)
+
+# Compute RMSE on training data
+sgdreg.fit(x_s,y_train)
+p = sgdreg.predict(x_s)
+err = p-y_train
+total_error = np.dot(err,err)
+rmse_train = np.sqrt(total_error/len(p))
+print('RMSE on training: %.4f' %rmse_train)
+
+# Using alpha = 0.0001, penalty = l1 on Test data
+
+#scaling test data
+scaler = StandardScaler()
+scaler.fit(X_test)
+x_s1 = scaler.transform(X_test)
+
+sgdreg = SGDRegressor(penalty='l1', alpha=0.0001, n_iter=300)
+
+# Compute RMSE on training data
+sgdreg.fit(x_s1,y_test)
+p = sgdreg.predict(x_s1)
+err = p-y_test
+total_error = np.dot(err,err)
+rmse_test = np.sqrt(total_error/len(p))
+print('RMSE on testing: %.4f' %rmse_test)
+
+#  find the best "l1_ratio" parameter using SGDRegressor with the "elasticnet" penalty parameter
+print('L1_ratio\t RMSE_train\n')
+penalty = np.linspace(.0001,1,50)
+t_rmse = np.array([])
+cv_rmse = np.array([])
+
+for a in penalty:
+    sgd = SGDRegressor(penalty='elasticnet', l1_ratio=a, alpha = 0.0001)
+    
+    # computing the RMSE on scaled training data
+    sgd.fit(x_s,y_train)
+    p = sgd.predict(x_s)
+    err = p-y_train
+    total_error = np.dot(err,err)
+    rmse_train = np.sqrt(total_error/len(p))
+
+    
+    t_rmse = np.append(t_rmse, [rmse_train])
+    print('{:.3f}\t\t{:.4f}\t'.format(a,rmse_train))
+    
+    
+# With L1_ratio = 0.388 0r 0.633, least amount of RMSE was observed, hence, we should go ahead with either of these.
+
+# Applying this on the test set
+sgdreg = SGDRegressor(penalty='elasticnet', alpha=0.0001, n_iter=300, l1_ratio = 0.388)
+
+# Compute RMSE on scaled testing data
+sgdreg.fit(x_s1,y_test)
+p = sgdreg.predict(x_s1)
+err = p-y_test
+total_error = np.dot(err,err)
+rmse_test = np.sqrt(total_error/len(p))
+print('RMSE on testing: %.4f' %rmse_test)
+
+
+
+### FINAL THOUGHTS
+
+# With L1_ratio = 0.388, a reduced RMSE of 0.1218 is observed in the test set compared to 0.1295 in training set. 
+
+# There is not much difference in RMSE between test and train sets.
+
+# Earlier with just L1 as penalty, a slightly higher RMSE of 0.1282 was observed. But overall, there has not been much of a difference in the RMSE observed with different parameters.
+
