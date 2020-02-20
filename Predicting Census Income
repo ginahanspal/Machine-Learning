@@ -1,0 +1,178 @@
+import pandas as pd
+import warnings
+warnings.filterwarnings('ignore')
+census = pd.read_csv("C:/Users/ginah/Desktop/adult-modified.csv", sep=',', na_values=["?"])
+
+census.describe(include="all")
+
+# In the case of numeric attribute - AGE, imputing and filling-in the missing values using its mean
+age_mean = census.age.mean()
+census.age.fillna(age_mean, axis=0, inplace=True)
+
+# In case of categorical attribute - Workclass, removing instances with missing values.
+census.dropna(axis=0, inplace=True)
+
+#relevant statistics of each NUMERIC attribute after manipulation
+census[["age","education","hours-per-week"]].describe()
+
+#relevant statistics of each CATEGORICAL attribute after manipulation
+census[["workclass","marital-status","race","sex","income"]].describe()
+
+#Histogram for Age
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+plt.hist(census["age"], bins=9,alpha=0.9,edgecolor='black', linewidth=1.2, color = 'blue')
+plt.xlabel('Age')
+plt.ylabel('Count')
+plt.title('Histogram of Age Population')
+plt.axis([10, 95, 0, 2500])
+plt.grid(True)
+
+#Histogram of Education
+plt.hist(census["education"], bins=9,alpha=0.9,edgecolor='black', linewidth=1.2, color = 'red')
+plt.xlabel('Education')
+plt.ylabel('Count')
+plt.title('Histogram of Education Population')
+#plt.axis([10, 95, 0, 2500])
+plt.grid(True)
+
+#Histogram of Hours/week
+plt.hist(census["hours-per-week"], bins=9,alpha=0.9,edgecolor='black', linewidth=1.2, color = 'green')
+plt.xlabel('Hours/week')
+plt.ylabel('Count')
+plt.title('Histogram of Hours/week')
+#plt.axis([10, 95, 0, 2500])
+plt.grid(True)
+
+#Bargraph of Work class
+
+graph = census["workclass"].value_counts().plot(kind='bar').set_xlabel('Work class')
+
+#Bargraph of Marital STatus
+graph = census["marital-status"].value_counts().plot(kind='bar').set_xlabel('Marital Status')
+
+#Bargraph of Sex
+graph = census["sex"].value_counts().plot(kind='bar').set_xlabel('Sex')
+
+#Bargraph of Sex
+graph = census["income"].value_counts().plot(kind='bar').set_xlabel('Income')
+
+#cross tabulation of education and race
+gg = pd.crosstab(census["education"], census["race"])
+plt.show(gg.plot(kind="bar"))
+
+#cross tabulation of workclass and income
+
+ff = pd.crosstab(census["workclass"], census["income"])
+ff
+plt.show(ff.plot(kind="bar"))
+
+#cross tabulation of workclass and race
+
+hh = pd.crosstab(census["workclass"], census["race"])
+hh 
+plt.show(hh.plot(kind="bar"))
+
+#cross tabulation of race and income
+
+jj = pd.crosstab(census["race"], census["income"])
+jj 
+plt.show(jj.plot(kind="bar"))
+
+#percentages of each race category that fall in the low-income group 0 table
+jj["percent_Low-Income"] = (jj["<=50K"]/(jj["<=50K"]+jj[">50K"]))*100
+jj
+
+#percentages of each race category that fall in the low-income group - graph
+plt.show(jj["percent_Low-Income"].plot(kind="bar"))
+
+# It is observed that a high percentage of people among the Hispanics fall under the low-income group followed by Amer-Indians.
+# Comparatively, least percentage of people among the Whites fall under the low income group followed by Asians, when compared to other races.
+# It would be right to say that a high percentage of people among the Whites followed by Asians belonged to the high income group.
+# Overall, private working class had most of its people fallen under the highest income group: >50K, but more than half of private working class fell under the low-income group similar to public working class.
+# On the other hand, self-employed working class had the most amount of its people under the highest income group.
+# Hence, Most of the self employed had high income, while most of the private working class had a low income.
+
+#Also, a high percentage of people among the Whites followed by Asians belonged to the high income group. Where as,  a high percentage of people among the Hispanics fall under the low-income group followed by Amer-Indians.
+
+#splitting target from the dataset
+census_set = census[['age','workclass','education','marital-status','race','sex','hours-per-week']]
+census_income = census.income
+from sklearn.cross_validation import train_test_split
+c_matrix = pd.get_dummies(census_set[['age','workclass','education','marital-status','race','sex','hours-per-week']])
+c_matrix.head(5)
+
+from sklearn import tree, naive_bayes
+
+from sklearn.cross_validation import train_test_split
+c_train, c_test, c_target_train, c_target_test = train_test_split(c_matrix, census_income, test_size=0.2, random_state=33)
+
+# Naive Bayes Gaussian classifier
+nbclf = naive_bayes.GaussianNB()
+nbclf = nbclf.fit(c_train, c_target_train)
+print ("Score on Training: ", nbclf.score(c_train, c_target_train))
+print ("Score on Test: ", nbclf.score(c_test, c_target_test))
+
+# Decision tree classifier
+treeclf = tree.DecisionTreeClassifier(criterion='entropy')
+treeclf = treeclf.fit(c_train, c_target_train)
+print ("Score on Training: ", treeclf.score(c_train, c_target_train))
+print ("Score on Test: ", treeclf.score(c_test, c_target_test))
+
+# Linear Discriminant Analysis
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+
+ldclf = LinearDiscriminantAnalysis()
+ldclf = ldclf.fit(c_train, c_target_train)
+print ("Score on Training: ", ldclf.score(c_train, c_target_train))
+print ("Score on Test: ", ldclf.score(c_test, c_target_test))
+
+from sklearn.tree import export_graphviz
+from sklearn import cross_validation
+
+# 10 folds Cross validation on Decision tree
+treeclf = tree.DecisionTreeClassifier(criterion='entropy')
+cv_scores = cross_validation.cross_val_score(treeclf, c_matrix, census_income, cv=10)
+cv_scores
+print("Overall Accuracy on X-Val: %0.2f (+/- %0.2f)" % (cv_scores.mean(), cv_scores.std() * 2))
+
+treeclf = treeclf.fit(c_train, c_target_train)
+print ("Accuracy on Training: ",  treeclf.score(c_train, c_target_train))
+
+# 10 folds Cross validation on Naive Bayes Gausssian
+nbclf = naive_bayes.GaussianNB()
+cv_scores = cross_validation.cross_val_score(nbclf, c_matrix, census_income, cv=10)
+cv_scores
+print("Overall Accuracy on X-Val: %0.2f (+/- %0.2f)" % (cv_scores.mean(), cv_scores.std() * 2))
+
+nbclf = nbclf.fit(c_train, c_target_train)
+print ("Accuracy on Training: ",  nbclf.score(c_train, c_target_train))
+
+# 10 folds Cross validation on Linear Discriminant Analysis
+ldclf = LinearDiscriminantAnalysis()
+cv_scores = cross_validation.cross_val_score(ldclf, c_matrix, census_income, cv=10)
+cv_scores
+
+print("Overall Accuracy on X-Val: %0.2f (+/- %0.2f)" % (cv_scores.mean(), cv_scores.std() * 2))
+
+ldclf = ldclf.fit(c_train, c_target_train)
+print ("Accuracy on Training: ",  ldclf.score(c_train, c_target_train))
+
+import graphviz
+
+export_graphviz(treeclf,out_file='tree.dot', feature_names=c_train.columns, class_names=["No","Yes"])
+
+import os
+os.environ["PATH"] += os.pathsep + 'C:/Users/Anaconda3/Lib/site-packages/graphviz'
+os.environ["PATH"] += os.pathsep + 'C:/Users/Anaconda3/Library/share'
+os.environ["PATH"] += os.pathsep + 'C:/Users/Anaconda3/Library/bin/graphviz'
+os.environ["PATH"] += os.pathsep + 'C:/Users/Anaconda3/Library/share/doc/graphviz'
+
+with open("tree.dot") as f:
+    dot_graph = f.read()
+    
+#Visual tree embed
+graphviz.Source(dot_graph)
+    
+    
