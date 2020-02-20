@@ -1,0 +1,157 @@
+import pandas as pd
+import warnings
+warnings.filterwarnings('ignore')
+
+# a) loading in the dataset
+
+dataMat = np.genfromtxt('C:/Users/ginah/Desktop/modified_jester_data.csv',delimiter=',')
+
+def load_jokes(file):
+    jokes = np.genfromtxt(file, delimiter=',', dtype=str)
+    jokes = np.array(jokes[:,1])
+    return jokes
+
+def get_joke_text(jokes, id):
+    return jokes[id]
+
+jokes = load_jokes('jokes.csv')
+
+# defining the necessary functions
+
+def ecludSim(inA,inB):
+    return 1.0 / (1.0 + la.norm(inA - inB))
+
+def pearsSim(inA,inB):
+    if len(inA) < 3 : return 1.0
+    return 0.5 + 0.5 * np.corrcoef(inA, inB, rowvar = 0)[0][1]
+
+def cosSim(inA,inB):
+    num = float(inA.T * inB)
+    denom = la.norm(inA)*la.norm(inB)
+    return 0.5 + 0.5 * (num / denom)
+
+def standEst(dataMat, user, simMeas, item):
+    n = np.shape(dataMat)[1]
+    simTotal = 0.0; ratSimTotal = 0.0
+    for j in range(n):
+        userRating = dataMat[user,j]
+        if userRating == 0: continue
+        overLap = np.nonzero(np.logical_and(dataMat[:,item]>0, \
+                                      dataMat[:,j]>0))[0]
+        if len(overLap) == 0: similarity = 0
+        else: similarity = simMeas(dataMat[overLap,item], \
+                                   dataMat[overLap,j])
+        #print 'the %d and %d similarity is: %f' % (item, j, similarity)
+        simTotal += similarity
+        ratSimTotal += similarity * userRating
+    if simTotal == 0: return 0
+    else: return ratSimTotal/simTotal
+    
+def svdEst(dataMat, user, simMeas, item):
+    n = np.shape(dataMat)[1]
+    simTotal = 0.0; ratSimTotal = 0.0
+    data=mat(dataMat)
+    U,Sigma,VT = la.svd(data)
+    Sig4 = mat(eye(4)*Sigma[:4]) #arrange Sig4 into a diagonal matrix
+    xformedItems = data.T * U[:,:4] * Sig4.I  #create transformed items
+    for j in range(n):
+        userRating = data[user,j]
+        if userRating == 0 or j==item: continue
+        similarity = simMeas(xformedItems[item,:].T,\
+                             xformedItems[j,:].T)
+        #print 'the %d and %d similarity is: %f' % (item, j, similarity)
+        simTotal += similarity
+        ratSimTotal += similarity * userRating
+    if simTotal == 0: return 0
+    else: return ratSimTotal/simTotal
+
+def cross_validate_user(dataMat, user, test_ratio, estMethod=standEst, simMeas=pearsSim):
+    number_of_items = np.shape(dataMat)[1]
+    rated_items_by_user = np.array([i for i in range(number_of_items) if dataMat[user,i]>0])
+    test_size = test_ratio * len(rated_items_by_user)
+    test_indices = np.random.randint(0, len(rated_items_by_user), int(test_size))
+    withheld_items = rated_items_by_user[test_indices]
+    original_user_profile = np.copy(dataMat[user])
+    dataMat[user, withheld_items] = 0 # So that the withheld test items is not used in the rating estimation below
+    error_u = 0.0
+    count_u = len(withheld_items)
+
+    # Compute absolute error for user u over all test items
+    for item in withheld_items:
+        # Estimate rating on the withheld item
+        estimatedScore = estMethod(dataMat, user, simMeas, item)
+        error_u = error_u + abs(estimatedScore - original_user_profile[item])	
+
+    # Now restore ratings of the withheld items to the user profile
+    for item in withheld_items:
+        dataMat[user, item] = original_user_profile[item]
+
+    # Return sum of absolute errors and the count of test cases for this user
+    # Note that these will have to be accumulated for each user to compute MAE
+    return error_u, count_u
+    
+    
+# b) Completing the definition for the function "test".
+
+def test(dataMat, test_ratio, estMethod):
+    n = np.shape(dataMat)[1]
+    error = []
+    count = []
+    #user = np.shape(dataMat[0])
+    for j in range(n):
+        a, b = cross_validate_user(dataMat, n, test_ratio, estMethod=standEst, simMeas=pearsSim)
+        error.append(a)
+        count.append(b)
+    MAE = sum(error)/sum(count)
+    if estMethod == svdEst:
+        print ('Mean Absoloute Error for svdEst: ', MAE)
+    if estMethod == standEst:
+        print ('Mean Absoloute Error for standEst: ', MAE)
+ 
+ 
+test(dataMat, 0.2, svdEst)
+test(dataMat, 0.2, standEst)
+
+# c) Write a new function "print_most_similar_jokes". 
+# It takes joke ratings data, a query joke id, a parameter k for the number of nearest neighbors, & a similarity metric function.
+# Prints the text of the query joke as well as the texts of the top k most similar jokes based on user ratings.
+
+from sklearn import neighbors
+
+def print_most_similar_jokes(dataMat, jokes, queryJoke, k, metric=pearsSim):
+    knnclf = neighbors.KNeighborsClassifier(weights='distance')
+    knnclf.fit(dataMat.T, jokes)
+    distances, indices = knnclf.kneighbors(dataMat.T[[queryJoke]],  n_neighbors=k+1)
+
+    print("Selected joke: ", "\n", '\n',jokes[queryJoke])
+    print('\n')
+    print("Top 5 Recommended jokes are :")
+    print('\n')
+    for x in indices:
+        for y in x:
+            if y == queryJoke:
+                continue
+            if y != queryJoke:
+                print(jokes[y])
+                print("_______________________________________________")
+                
+                     
+print_most_similar_jokes(dataMat, jokes, 3, 5, pearsSim)
+Selected joke:  
+ 
+ Q. What's the difference between a man and a toilet? A. A toilet doesn't follow you around after you use it.
+
+
+Top 5 Recommended jokes are :
+
+
+What do you get when you run over a parakeet with a lawnmower? Shredded tweet.
+_______________________________________________
+How many teddy bears does it take to change a lightbulb?It takes only one teddybear but it takes a whole lot of lightbulbs.
+_______________________________________________
+What do you call an American in the finals of the world cup?"Hey Beer Man!"
+_______________________________________________
+A country guy goes into a city bar that has a dress code and the maitred' demands he wear a tie. Discouraged the guy goes to his car to sulk when inspiration strikes: He's got jumper cables in the trunk! So he wraps them around his neck sort of like a string tie (a bulky string tie to be sure) and returns to the bar. The maitre d' is reluctant but says to the guy "Okay you're a pretty resourceful fellow you can come in... but just don't start anything"!
+_______________________________________________
+Why are there so many Jones's in the phone book?Because they all have phones.
+_______________________________________________           
