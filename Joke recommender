@@ -2,8 +2,6 @@ import pandas as pd
 import warnings
 warnings.filterwarnings('ignore')
 
-# a) loading in the dataset
-
 dataMat = np.genfromtxt('C:/Users/ginah/Desktop/modified_jester_data.csv',delimiter=',')
 
 def load_jokes(file):
@@ -91,7 +89,6 @@ def cross_validate_user(dataMat, user, test_ratio, estMethod=standEst, simMeas=p
     return error_u, count_u
     
     
-# b) Completing the definition for the function "test".
 
 def test(dataMat, test_ratio, estMethod):
     n = np.shape(dataMat)[1]
@@ -112,7 +109,6 @@ def test(dataMat, test_ratio, estMethod):
 test(dataMat, 0.2, svdEst)
 test(dataMat, 0.2, standEst)
 
-# c) Write a new function "print_most_similar_jokes". 
 # It takes joke ratings data, a query joke id, a parameter k for the number of nearest neighbors, & a similarity metric function.
 # Prints the text of the query joke as well as the texts of the top k most similar jokes based on user ratings.
 
